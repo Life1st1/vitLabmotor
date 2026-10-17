@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "moteus")(type "KiCad")(uri "/home/cuong/Desktop/moteus/hw/c1/moteus.pretty")(options "")(descr ""))
+)

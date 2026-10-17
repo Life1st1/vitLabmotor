@@ -1,0 +1,31 @@
+# 1. Business Requirements
+
+Tài liệu đặc tả các yêu cầu nghiệp vụ (Business Requirements) của dự án **Board điều khiển động cơ không chổi than FOC (High-Performance FOC BLDC/PMSM Driver)** dành cho khớp robot, cánh tay cơ khí và cơ cấu chấp hành chính xác.
+
+---
+
+## 1.1. Bảng Yêu Cầu Nghiệp Vụ Chuẩn Hóa
+
+| Id | Nhóm Yêu Cầu | Yêu Cầu Nghiệp Vụ (Business Requirement) | Tiêu Chí Cụ Thể / Ràng Buộc Mục Tiêu |
+| :--- | :--- | :--- | :--- |
+| **BR-001** | Motion Control | Điều khiển động cơ FOC đa chế độ (Torque/Current, Velocity, Position, Duty cycle) với độ mượt mà cao, độ gợn moment cực thấp (Low torque ripple). | Vòng lặp dòng FOC mượt, không giật cục ở tốc độ thấp, bám vết vị trí chính xác cho cánh tay robot. |
+| **BR-002** | Power & Load | Năng lực cấp dòng công suất cao đáp ứng phản ứng tức thời và tải nặng của khớp khuỷu/khớp robot. | **Dòng định mức liên tục: 30A** (có tản nhiệt cơ bản).<br>**Dòng đỉnh (Peak): 60A** (trong thời gian ngắn $\ge 5\text{s}$ phục vụ gia tốc nhảy/va đập). |
+| **BR-003** | Sensing | Phản hồi vị trí góc tuyệt đối với độ chính xác cao và tự động nhận diện góc 0 điện (Zero electrical angle offset calibration). | Hỗ trợ Encoder góc từ tính $\ge 14\text{-bit}$ (SPI), quy trình tự căn chỉnh góc tự động chỉ qua 1 thao tác lệnh. |
+| **BR-004** | Signal Integrity | Đo lường dòng pha động cơ có độ chính xác cao, tỷ lệ tín hiệu trên nhiễu (SNR) lớn, loại bỏ triệt để nhiễu chuyển mạch PWM. | Mạch Shunt vi sai và op-amp chống nhiễu; kích hoạt lấy mẫu ADC đồng bộ đúng tâm vector PWM không bị ảnh hưởng bởi xung switching. |
+| **BR-005** | Form Factor | Thiết kế bo mạch siêu nhỏ gọn, dạng đĩa tròn chuyên biệt gắn tích hợp trực tiếp sau thân động cơ (Integrated Actuator Joint). | **Hình tròn với bán kính $R < 10\text{cm}$** (tối ưu hóa $R \le 25\text{mm} - 45\text{mm}$ tùy cỡ motor), đầu nối có chốt gài chống rung lắc. |
+| **BR-006** | Ease of Use | Dễ điều khiển, dễ kết nối và sẵn sàng tích hợp vào hệ sinh thái điều khiển robot công nghiệp và nghiên cứu. | Tương thích ROS2 (cung cấp host node driver), bus CAN-FD tốc độ cao, hỗ trợ giao diện cấu hình dòng lệnh (CLI Shell) qua USB/UART. |
+| **BR-007** | Scalability | Kiến trúc phần mềm phân tầng rõ ràng, chuẩn hóa theo mô-đun, dễ bảo trì và dễ mở rộng tính năng mới. | Tách biệt App, Services, Core FOC và Hardware Abstraction Layer (HAL); dùng chung Unified Object Dictionary. |
+| **BR-008** | IP Strategy | Cân bằng giữa chia sẻ mã nguồn mở để phát triển cộng đồng và bảo vệ giá trị sở hữu trí tuệ thương mại. | Open-source tầng giao tiếp API, tool GUI/CLI, ROS2 node; đóng gói/bảo vệ phần lõi thuật toán điều khiển chuyên sâu. |
+| **BR-009** | Hardware Quality| Bo mạch PCB chắc chắn, cứng cáp, giải nhiệt hiệu quả, hoạt động ổn định trong môi trường công nghiệp rung lắc và khắc nghiệt. | PCB 4-6 lớp đồng dày (2-3oz), via stitching thoát nhiệt, linh kiện chuẩn công nghiệp dải nhiệt $-20^\circ\text{C} \sim +85^\circ\text{C}$. |
+| **BR-010** | Testability | Thiết kế phần cứng hỗ trợ kiểm tra phân tầng (Design for Testability - DFT) giúp rút ngắn thời gian bring-up và xuất xưởng. | Bố trí điểm đo Test Points (TP) chuẩn hóa cho từng khối: Phân tầng nguồn $\rightarrow$ MCU $\rightarrow$ Gate Driver $\rightarrow$ Inverter. |
+| **BR-011** | Energy Mgmt | Tích hợp mạch xả phanh tái sinh (Regenerative braking chopper) bảo vệ hệ thống khi khớp robot hãm đột ngột hoặc chịu tải quán tính lớn. | Hỗ trợ cổng kết nối điện trở xả phanh ngoài (Brake Resistor); tự động đóng xả khi điện áp VBUS vượt ngưỡng bảo vệ. |
+| **BR-012** | Power Monitor | Giám sát toàn diện trạng thái năng lượng của hệ thống (điện áp, dòng điện, công suất tức thời). | Hoạt động trên dải áp **12V ~ 60V**; tiêu thụ điện tĩnh không tải $< 1\text{W}$; giám sát $V_\text{bus}$, dòng tổng $I_\text{bus}$. |
+| **BR-013** | Thermal Safety | Giám sát nhiệt độ thời gian thực và tự động hạ dòng mềm mại (Smooth Thermal Derating) tránh sập/ngắt tải đột ngột. | Cảm biến nhiệt độ trên MOSFET & MCU; giảm dòng mượt mà khi nóng ($> 75^\circ\text{C}$), tránh làm rơi tự do cánh tay robot. |
+| **BR-014** | Protection | Hệ thống an toàn chủ động đa tầng, ngắt bảo vệ khẩn cấp tức thời khi xảy ra sự cố nghiêm trọng. | Ngắt cứng 6 xung PWM $< 1\mu\text{s}$ khi quá dòng/ngắn mạch; bảo vệ quá áp, thấp áp, kẹt trục (Stall), chống ESD, chống cắm ngược cực. |
+| **BR-015** | FW Update | Cập nhật phần mềm thuận tiện từ xa qua bus mạng và nạp phần mềm nạp trực tiếp qua cổng debug. | Hỗ trợ ST-Link / SWD và nạp Firmware từ xa qua CAN-FD; xác thực toàn vẹn CRC, tự động Rollback nếu cập nhật lỗi. |
+| **BR-016** | Config Mgmt | Quản lý và lưu trữ cấu hình tham số hệ thống bền vững, chống hỏng hóc khi mất nguồn đột ngột. | Lưu cấu hình trong Flash có Wear-Leveling; hỗ trợ Versioned Schema, tự động nâng cấp (Migration) và Factory Reset. |
+| **BR-017** | Telemetry | Truyền phát dữ liệu vận hành thời gian thực (Real-time Telemetry Streaming) phục vụ giám sát và điều khiển vòng ngoài. | Truyền đồng thời vị trí, vận tốc, dòng điện, điện áp, nhiệt độ với tần số cấu hình linh hoạt từ $1\text{Hz}$ đến $1000\text{Hz}$. |
+| **BR-018** | Diagnostics | Cung cấp đầy đủ chỉ số chẩn đoán sức khỏe hệ thống (Runtime Health Monitoring & Diagnostics). | Theo dõi dòng đỉnh/dòng trung bình, đếm số lần kẹt trục, đếm lỗi bus CAN, nhiệt độ cao nhất đạt được; truy xuất qua Object Dictionary. |
+| **BR-019** | Fault Logging | Ghi nhật ký lỗi kiên cố (Persistent Fault History Logging) giúp dễ dàng điều tra nguyên nhân sự cố trong quá khứ. | Lưu tối thiểu 8 bản ghi sự cố lịch sử gần nhất vào Flash (loại lỗi, dấu thời gian timestamp, điện áp và dòng điện lúc lỗi). |
+| **BR-020** | Target Cost | Chi phí linh kiện mục tiêu (Target BOM Cost) tối ưu, đảm bảo tính khả thi thương mại và cạnh tranh thị trường. | **Tổng chi phí linh kiện BOM $\le 1.000.000\text{ VNĐ}$** (~$38 - $40 USD) tại quy mô thử nghiệm và sản xuất hàng loạt nhỏ. |
+| **BR-021** | Supply Chain | Đảm bảo tính sẵn sàng của chuỗi cung ứng linh kiện, tránh rủi ro đứt gãy linh kiện hiếm. | Ưu tiên các dòng vi điều khiển, gate driver, MOSFET phổ biến, dễ mua tại các nhà phân phối lớn (LCSC, Mouser, DigiKey), có linh kiện thay thế tương đương. |
