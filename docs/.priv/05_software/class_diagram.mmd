@@ -1,0 +1,330 @@
+classDiagram
+    direction TB
+
+    %% ==========================================
+    %% ENUMS & DATA STRUCTURES
+    %% ==========================================
+    class ActuatorState {
+        <<enumeration>>
+        BOOT
+        CALIBRATING
+        IDLE
+        CLOSED_LOOP
+        ERROR_STOP
+        FAULT
+    }
+
+    class FaultCode {
+        <<enumeration>>
+        NONE
+        OVER_CURRENT_HW
+        OVER_CURRENT_SW
+        OVER_VOLTAGE
+        UNDER_VOLTAGE
+        OVER_TEMP_MOS
+        OVER_TEMP_MCU
+        ENCODER_FAULT
+        DRV8323_FAULT
+        MOTOR_STALL
+        COMM_TIMEOUT
+    }
+
+    class PhaseCurrents {
+        +float u
+        +float v
+        +float w
+    }
+
+    class VectorAlphaBeta {
+        +float alpha
+        +float beta
+    }
+
+    class VectorDQ {
+        +float d
+        +float q
+    }
+
+    class RotorMeasurement {
+        +float mechanical_angle_rad
+        +float electrical_angle_rad
+        +float velocity_rad_s
+        +bool is_valid
+    }
+
+    %% ==========================================
+    %% APPLICATION LAYER
+    %% ==========================================
+    class Actuator {
+        -ActuatorState current_state_
+        -ControlService control_service_
+        -SafetyManager safety_manager_
+        -ThermalManager thermal_manager_
+        -PowerMonitor power_monitor_
+        -BrakeChopper brake_chopper_
+        -AngleSensor angle_sensor_
+        -CurrentSensor current_sensor_
+        -GateDriver gate_driver_
+        -FocCore foc_core_
+        +init() bool
+        +tick_1khz() void
+        +fast_foc_isr() void
+        +transition_to(ActuatorState new_state) void
+        +get_state() ActuatorState
+        +handle_fault() void
+    }
+
+    %% ==========================================
+    %% SERVICES LAYER
+    %% ==========================================
+    class ControlService {
+        -float target_position_
+        -float target_velocity_
+        -float target_torque_
+        -float pos_kp_
+        -float vel_kp_
+        -float vel_ki_
+        -MotionProfile profile_
+        -FocCore* foc_core_
+        +init(FocCore* foc) void
+        +set_position_target(float rad) void
+        +set_velocity_target(float rad_s) void
+        +set_torque_target(float nm) void
+        +update_1khz(float current_pos, float current_vel) void
+        +reset() void
+    }
+
+    class CalibrationService {
+        -float measured_r_
+        -float measured_l_
+        -float zero_offset_angle_
+        -bool is_calibrated_
+        +run_motor_parameter_id() bool
+        +align_electrical_zero() bool
+        +get_results(float* r, float* l, float* offset) void
+    }
+
+    class ConfigurationService {
+        -uint32_t schema_version_
+        -FlashStorage* storage_
+        +load_configuration() bool
+        +save_configuration() bool
+        +reset_to_factory() void
+        +verify_checksum() bool
+    }
+
+    class TelemetryService {
+        -uint16_t stream_frequency_hz_
+        -CanComm* can_comm_
+        +init(CanComm* comm, uint16_t freq) void
+        +pack_and_send(RotorMeasurement angle, PhaseCurrents cur, float vbus) void
+    }
+
+    class DiagnosticsService {
+        -uint32_t can_error_count_
+        -uint32_t stall_count_
+        -float peak_current_
+        -FlashStorage* storage_
+        +log_event(uint16_t event_id) void
+        +save_fault_record(FaultCode fault, float vbus, float current) void
+        +read_fault_history(uint8_t index) void
+    }
+
+    class DebugShell {
+        -char rx_buffer_[128]
+        +init() void
+        +process_input(char ch) void
+        +execute_command(char* cmd) void
+        +print(char* msg) void
+    }
+
+    %% ==========================================
+    %% CORE & CONTROL LAYER
+    %% ==========================================
+    class FocCore {
+        -float current_kp_
+        -float current_ki_
+        -float id_integral_
+        -float iq_integral_
+        -float max_current_limit_
+        -VectorDQ target_idq_
+        -VectorDQ measured_idq_
+        -VectorDQ v_dq_
+        -VectorAlphaBeta v_alpha_beta_
+        -float pwm_duty_u_
+        -float pwm_duty_v_
+        -float pwm_duty_w_
+        +init(float kp, float ki, float max_i) void
+        +set_target_current(float id_ref, float iq_ref) void
+        +execute_fast_loop(PhaseCurrents i_phase, float elec_angle, float vbus) void
+        +clarke_transform(PhaseCurrents i_phase, VectorAlphaBeta* i_ab) void
+        +park_transform(VectorAlphaBeta i_ab, float angle, VectorDQ* i_dq) void
+        +inv_park_transform(VectorDQ v_dq, float angle, VectorAlphaBeta* v_ab) void
+        +svpwm_modulate(VectorAlphaBeta v_ab, float vbus) void
+        +get_pwm_duty(float* du, float* dv, float* dw) void
+        +reset_integrators() void
+    }
+
+    class MotionProfile {
+        -float max_velocity_
+        -float max_acceleration_
+        -float current_ref_pos_
+        -float current_ref_vel_
+        +set_limits(float max_v, float max_a) void
+        +calculate_step(float target_pos, float dt) void
+        +get_setpoint(float* pos, float* vel) void
+    }
+
+    class BrakeChopper {
+        -float vbus_activate_threshold_
+        -float vbus_deactivate_threshold_
+        -bool is_discharging_
+        -float duty_cycle_
+        +init(float v_act, float v_deact) void
+        +update(float current_vbus) void
+        +is_active() bool
+    }
+
+    %% ==========================================
+    %% SAFETY LAYER
+    %% ==========================================
+    class SafetyManager {
+        -uint32_t active_faults_
+        -uint32_t latched_faults_
+        +init() void
+        +trigger_fault(FaultCode fault) void
+        +clear_faults() void
+        +has_critical_fault() bool
+        +emergency_shutdown() void
+        +get_active_faults() uint32_t
+    }
+
+    class ThermalManager {
+        -float mosfet_temp_c_
+        -float mcu_temp_c_
+        -float derating_start_temp_
+        -float derating_cutoff_temp_
+        -float derating_factor_
+        +init(float t_start, float t_cutoff) void
+        +update_temperatures(float mosfet_adc, float mcu_adc) void
+        +calculate_current_limit(float base_limit) float
+        +is_overheated() bool
+    }
+
+    %% ==========================================
+    %% DRIVERS & PERIPHERALS LAYER
+    %% ==========================================
+    class CurrentSensor {
+        -float shunt_resistor_ohm_
+        -float amp_gain_
+        -float amps_per_count_
+        -int32_t offset_u_
+        -int32_t offset_v_
+        -int32_t offset_w_
+        -PhaseCurrents last_currents_
+        +init(float shunt_ohm, float gain) bool
+        +calibrate_zero_offset(uint16_t sample_count) void
+        +sample_isr() void
+        +get_currents() PhaseCurrents
+        +get_current_magnitude() float
+    }
+
+    class AngleSensor {
+        -uint8_t pole_pairs_
+        -float zero_offset_electrical_rad_
+        -int8_t direction_
+        -uint16_t raw_angle_14bit_
+        -RotorMeasurement measurement_
+        -float previous_angle_rad_
+        -float velocity_lpf_alpha_
+        +init(uint8_t pole_pairs, int8_t direction) bool
+        +read_spi() bool
+        +update(float dt) void
+        +set_electrical_zero(float offset_rad) void
+        +get_measurement() RotorMeasurement
+        +check_parity(uint16_t raw_data) bool
+    }
+
+    class GateDriver {
+        -uint16_t fault_reg1_
+        -uint16_t fault_reg2_
+        -bool is_enabled_
+        +init() bool
+        +enable() void
+        +disable() void
+        +check_fault_pin() bool
+        +read_fault_registers() bool
+        +clear_fault() void
+        +configure_drive_strength(uint8_t idrivep, uint8_t idriven) bool
+    }
+
+    class PowerMonitor {
+        -float vbus_voltage_
+        -float vbus_divider_ratio_
+        -float vbus_ovp_threshold_
+        -float vbus_uvp_threshold_
+        +init(float divider_ratio, float ovp, float uvp) void
+        +sample_adc() void
+        +get_vbus() float
+        +is_over_voltage() bool
+        +is_under_voltage() bool
+    }
+
+    class FlashStorage {
+        -uint32_t base_address_
+        -uint32_t sector_size_
+        +init(uint32_t addr, uint32_t size) bool
+        +read(uint32_t offset, uint8_t* buffer, uint32_t len) bool
+        +write(uint32_t offset, uint8_t* data, uint32_t len) bool
+        +erase_sector() bool
+    }
+
+    class CanComm {
+        -uint8_t node_id_
+        -uint32_t rx_msg_count_
+        -uint32_t tx_msg_count_
+        +init(uint8_t id) bool
+        +send_frame(uint32_t can_id, uint8_t* data, uint8_t len) bool
+        +receive_frame_isr() void
+    }
+
+    class ObjectDictionary {
+        +read_parameter(uint16_t index, uint8_t sub_index, void* value) bool
+        +write_parameter(uint16_t index, uint8_t sub_index, void* value) bool
+    }
+
+    %% ==========================================
+    %% RELATIONSHIPS / ASSOCIATIONS
+    %% ==========================================
+    Actuator *-- ActuatorState
+    Actuator *-- ControlService
+    Actuator *-- SafetyManager
+    Actuator *-- ThermalManager
+    Actuator *-- PowerMonitor
+    Actuator *-- BrakeChopper
+    Actuator *-- AngleSensor
+    Actuator *-- CurrentSensor
+    Actuator *-- GateDriver
+    Actuator *-- FocCore
+
+    SafetyManager ..> FaultCode : manages
+
+    ControlService *-- MotionProfile
+    ControlService o-- FocCore
+
+    CalibrationService o-- CurrentSensor
+    CalibrationService o-- AngleSensor
+    CalibrationService o-- FocCore
+
+    ConfigurationService o-- FlashStorage
+    DiagnosticsService o-- FlashStorage
+
+    TelemetryService o-- CanComm
+    TelemetryService ..> RotorMeasurement
+    TelemetryService ..> PhaseCurrents
+
+    FocCore ..> PhaseCurrents : input
+    FocCore ..> VectorAlphaBeta : internal math
+    FocCore ..> VectorDQ : internal math
+    CurrentSensor *-- PhaseCurrents
+    AngleSensor *-- RotorMeasurement

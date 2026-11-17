@@ -1,0 +1,16 @@
+edm_version: "1.0"
+
+module:
+  name: motor
+  version: "1.0.0"
+
+parameters:
+  - name: velocity_limit
+    id: 1001
+    type: float
+    default: 10.0
+    constraints:
+        min: 0.0
+        max: 100.0
+
+  - test:
